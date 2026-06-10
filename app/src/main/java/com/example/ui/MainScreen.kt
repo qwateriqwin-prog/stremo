@@ -1,5 +1,6 @@
 package com.example.ui
 
+import android.content.Intent
 import android.net.Uri
 import android.text.format.DateFormat
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -1663,6 +1664,180 @@ fun GlobalSettingsDialog(
                                 borderColor = if (isSelected) AccentCyan else BorderColor
                             )
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider(color = BorderColor)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "الدعم والـتواصل وتحديثات التطبيق 💫:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    color = textColor,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val context = LocalContext.current
+                var showAboutDialog by remember { mutableStateOf(false) }
+
+                if (showAboutDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showAboutDialog = false },
+                        title = {
+                            Text(
+                                "معلومات حول التطبيق ℹ️",
+                                fontWeight = FontWeight.Bold,
+                                color = textColor,
+                                fontSize = 16.sp,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Right
+                            )
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.End
+                            ) {
+                                Text(
+                                    text = "البدر IPTV برو",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = AccentCyan
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "الإصدار المحدث المعتمد: v2.5.0 Pro",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AccentRed
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "مشغل البث المباشر المطور للباقات والقنوات العربية والعالمية. يدعم صيغ البث المختلفة وسيرفرات IPTV والـ Xtream وقوائم MAC Portals بسهولة وسرعة فائقة في معالجة فك التشفير وعرض المحتوى بدون تقطيع.",
+                                    fontSize = 12.sp,
+                                    color = SoftGray,
+                                    textAlign = TextAlign.Right,
+                                    lineHeight = 18.sp
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "حقوق الطبع والنشر © 2026 محفوظة.",
+                                    fontSize = 10.sp,
+                                    color = SoftGray
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showAboutDialog = false }) {
+                                Text("حسناً", color = AccentCyan, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        containerColor = surfaceColor
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/zozmmnosh"))
+                                try { context.startActivity(intent) } catch (e: Exception) {}
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.25f)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, BorderColor)
+                        ) {
+                            Text("تواصل مع المطور 💬", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/BadrIPTV_Support"))
+                                try { context.startActivity(intent) } catch (e: Exception) {}
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.25f)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, BorderColor)
+                        ) {
+                            Text("الدعم الفني 🛠️", fontSize = 11.sp, color = AccentCyan, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/BadrIPTVUpdates"))
+                                try { context.startActivity(intent) } catch (e: Exception) {}
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.25f)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, BorderColor)
+                        ) {
+                            Text("تحديثات التطبيق 📢", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = { showAboutDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.25f)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, BorderColor)
+                        ) {
+                            Text("معلومات التطبيق ℹ️", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            try {
+                                val pm = context.packageManager
+                                val appInfo = pm.getApplicationInfo(context.packageName, 0)
+                                val apkFile = java.io.File(appInfo.sourceDir)
+                                
+                                val shareUri = androidx.core.content.FileProvider.getUriForFile(
+                                    context,
+                                    "com.example.provider",
+                                    apkFile
+                                )
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "application/vnd.android.package-archive"
+                                    putExtra(Intent.EXTRA_STREAM, shareUri)
+                                    putExtra(Intent.EXTRA_SUBJECT, "تطبيق البدر IPTV برو المطور")
+                                    putExtra(Intent.EXTRA_TEXT, "قم بتنزيل تطبيق البدر IPTV برو المحدث v2.5.0 لتشغيل اشتراكات وقنوات البث المباشر!\nرابط تشغيل النسخة المباشرة:\nhttps://ais-pre-u3vxat6yva32qg3vfvp7zs-535001705030.europe-west2.run.app")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "مشاركة ملف الـ APK المباشر للتطبيق"))
+                            } catch (ex: Exception) {
+                                val shareTxtIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "تطبيق البدر IPTV برو المحدث")
+                                    putExtra(Intent.EXTRA_TEXT, "حمل الآن تطبيق البدر IPTV برو المحدث لتشغيل جميع القنوات وسيرفرات البث المباشر وبورتال IPTV:\nhttps://ais-pre-u3vxat6yva32qg3vfvp7zs-535001705030.europe-west2.run.app")
+                                }
+                                context.startActivity(Intent.createChooser(shareTxtIntent, "مشاركة رابط التطبيق"))
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("مشاركة التطبيق مباشرة كـ APK 📤", fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
 
