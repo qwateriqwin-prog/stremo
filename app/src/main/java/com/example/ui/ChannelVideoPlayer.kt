@@ -36,6 +36,10 @@ import androidx.media3.ui.PlayerView
 import com.example.data.ChannelEntity
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
+import java.security.cert.X509Certificate
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -66,17 +70,35 @@ fun ChannelVideoPlayer(
         label = "pulse"
     )
 
-    // Build ExoPlayer with optional customized User Agent
+    // Build ExoPlayer with optional customized User Agent and SSL bypass
     val exoPlayer = remember(channel.id) {
-        val client = OkHttpClient.Builder()
+        val clientBuilder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
-            .build()
+
+        try {
+            val trustAllCerts = arrayOf<TrustManager>(
+                object : X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+                }
+            )
+
+            val sslContext = SSLContext.getInstance("SSL")
+            sslContext.init(null, trustAllCerts, java.security.SecureRandom())
+            clientBuilder.sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
+            clientBuilder.hostnameVerifier { _, _ -> true }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        val client = clientBuilder.build()
 
         val userAgentHeader = if (!customUserAgent.isNullOrBlank()) {
             customUserAgent.trim()
         } else {
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) IPTVPlayerPro"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
         // Configure Media3 DataSource with OkHttp and the specific User-Agent

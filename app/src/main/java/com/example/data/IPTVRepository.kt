@@ -13,6 +13,10 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
+import java.security.cert.X509Certificate
 
 data class EPGProgram(
     val title: String,
@@ -74,10 +78,7 @@ class IPTVRepository(
                 }
             } else if (!url.isNullOrBlank()) {
                 // Fetch from remote URL
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(15, TimeUnit.SECONDS)
-                    .readTimeout(20, TimeUnit.SECONDS)
-                    .build()
+                val client = getUnsafeOkHttpClient()
 
                 val requestBuilder = Request.Builder().url(url)
                 if (!userAgent.isNullOrBlank()) {
@@ -339,10 +340,7 @@ class IPTVRepository(
             val playlistId = iptvDao.insertPlaylist(playlist).toInt()
             val parsedChannels = mutableListOf<ChannelEntity>()
 
-            val client = OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
-                .build()
+            val client = getUnsafeOkHttpClient()
 
             val ua = if (!userAgent.isNullOrBlank()) userAgent.trim() else "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 sb.gxtrrt.55-2.6.2.14-r2 Safari/533.3"
 
@@ -476,5 +474,27 @@ class IPTVRepository(
             Log.e("IPTVRepository", "MAG Import failed", e)
             Result.failure(e)
         }
+    }
+
+    private fun getUnsafeOkHttpClient(): OkHttpClient {
+        val builder = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+        try {
+            val trustAllCerts = arrayOf<TrustManager>(
+                object : X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+                }
+            )
+            val sslContext = SSLContext.getInstance("SSL")
+            sslContext.init(null, trustAllCerts, java.security.SecureRandom())
+            builder.sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
+            builder.hostnameVerifier { _, _ -> true }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return builder.build()
     }
 }

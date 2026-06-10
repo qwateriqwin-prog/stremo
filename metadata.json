@@ -1,5 +1,5 @@
 {
-  "name": "Smart IPTV Player",
+  "name": "البدر IPTV برو",
   "description": "مشغل قنوات IPTV وسيرفرات M3U و TS مميز مع دليل البرامج المتقدم والمفضلة وتخصيص يوزر اجنت",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
