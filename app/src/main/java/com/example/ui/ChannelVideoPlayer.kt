@@ -70,11 +70,24 @@ fun ChannelVideoPlayer(
         label = "pulse"
     )
 
-    // Build ExoPlayer with optional customized User Agent and SSL bypass
-    val exoPlayer = remember(channel.id) {
+    var currentAttempt by remember(channel.id) { mutableStateOf(0) }
+
+    // Build ExoPlayer with optional customized User Agent, SSL bypass, Cookie preservation, and reactive fallback attempts
+    val exoPlayer = remember(channel.id, currentAttempt) {
         val clientBuilder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .cookieJar(object : okhttp3.CookieJar {
+                private val cookieStore = HashMap<String, List<okhttp3.Cookie>>()
+                override fun saveFromResponse(url: okhttp3.HttpUrl, cookies: List<okhttp3.Cookie>) {
+                    cookieStore[url.host] = cookies
+                }
+                override fun loadForRequest(url: okhttp3.HttpUrl): List<okhttp3.Cookie> {
+                    return cookieStore[url.host] ?: ArrayList()
+                }
+            })
 
         try {
             val trustAllCerts = arrayOf<TrustManager>(
@@ -101,19 +114,52 @@ fun ChannelVideoPlayer(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
-        // Configure Media3 DataSource with OkHttp and the specific User-Agent
-        val dataSourceFactory = OkHttpDataSource.Factory(client)
-            .setUserAgent(userAgentHeader)
+        // Configure Media3 DataSource depending on current attempt
+        val dataSourceFactory = if (currentAttempt < 3) {
+            val okHttpFactory = OkHttpDataSource.Factory(client)
+                .setUserAgent(userAgentHeader)
+            
+            // Wrap in DefaultDataSource.Factory to handle multi-protocol fallbacks
+            androidx.media3.datasource.DefaultDataSource.Factory(context, okHttpFactory)
+        } else {
+            // Ultimate fallback using native HTTP datasource
+            androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                .setUserAgent(userAgentHeader)
+                .setAllowCrossProtocolRedirects(true)
+        }
 
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
             .build().apply {
-                val mediaItem = MediaItem.Builder()
+                val mediaItemBuilder = MediaItem.Builder()
                     .setUri(Uri.parse(channel.url))
-                    .build()
-                setMediaItem(mediaItem)
+
+                val urlLower = channel.url.lowercase()
+                when (currentAttempt) {
+                    0 -> {
+                        // Guide auto-detection for known formats
+                        if (urlLower.contains("m3u8")) {
+                            mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+                        } else if (urlLower.contains(".ts") || urlLower.contains("/ts") || urlLower.contains("output=ts")) {
+                            mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.VIDEO_MP2T)
+                        } else if (urlLower.startsWith("rtsp")) {
+                            mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_RTSP)
+                        }
+                    }
+                    1 -> {
+                        // Enforce HLS
+                        mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+                    }
+                    2 -> {
+                        // Enforce Progressive TS
+                        mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.VIDEO_MP2T)
+                    }
+                    // Attempt 3+: Let ExoPlayer auto detect inside DefaultHttpDataSource fallback
+                }
+
+                setMediaItem(mediaItemBuilder.build())
                 prepare()
                 playWhenReady = true
             }
@@ -130,8 +176,15 @@ fun ChannelVideoPlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                playbackError = "فشل في تحميل البث. تأكد من أن السيرفر يعمل أو جرب تغيير اليوزر اجنت."
-                isBuffering = false
+                error.printStackTrace()
+                if (currentAttempt < 3) {
+                    // Try the next playback configuration silently
+                    currentAttempt++
+                    isBuffering = true
+                } else {
+                    playbackError = "فشل في تحميل البث. تأكد من أن السيرفر يعمل أو جرب تغيير اليوزر اجنت."
+                    isBuffering = false
+                }
             }
         }
         exoPlayer.addListener(listener)
@@ -271,8 +324,7 @@ fun ChannelVideoPlayer(
                             onClick = {
                                 playbackError = null
                                 isBuffering = true
-                                exoPlayer.prepare()
-                                exoPlayer.playWhenReady = true
+                                currentAttempt = 0
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
                         ) {
