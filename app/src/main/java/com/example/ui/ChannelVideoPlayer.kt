@@ -6,6 +6,7 @@ import android.widget.FrameLayout
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -52,6 +53,24 @@ fun ChannelVideoPlayer(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+
+    // Set sticky immersive mode to hide phone system navigation keys and status bar
+    DisposableEffect(Unit) {
+        val activity = context.findActivity()
+        val window = activity?.window
+        if (window != null) {
+            val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+            controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose {
+            if (window != null) {
+                val controller = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
     var currentAttempt by remember(channel.id) { mutableStateOf(0) }
     var isPlaying by remember(channel.id, currentAttempt) { mutableStateOf(true) }
     var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
@@ -257,70 +276,86 @@ fun ChannelVideoPlayer(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Custom Overlay Controls
+        // ALWAYS VISIBLE TOP HEADER BAR with a dark shadow gradient background to guarantee visibility
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.85f),
+                            Color.Black.copy(alpha = 0.45f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .align(Alignment.TopCenter)
+                .padding(top = 16.dp, bottom = 32.dp, start = 16.dp, end = 16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // LIVE - مباشر Indicator
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Red.copy(alpha = 0.95f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = livePulseAlpha))
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "مباشر 🔴",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Channel Name (Centered or Top title)
+                Text(
+                    text = channel.name,
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                    maxLines = 1
+                )
+
+                // Close View Button (Always visible for easy navigation back)
+                IconButton(
+                    onClick = onClosePlayer,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                        .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close Player",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+
+        // Custom Overlay Controls (Fades in/out)
         if (showControls || playbackError != null || isBuffering) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
+                    .background(Color.Black.copy(alpha = 0.4f))
             ) {
-                // TOP BAR
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopCenter)
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // LIVE - مباشر Indicator
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.Red.copy(alpha = 0.85f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = livePulseAlpha))
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "مباشر 🔴",
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // Channel Name (Centered or Top title)
-                    Text(
-                        text = channel.name,
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 16.dp),
-                        maxLines = 1
-                    )
-
-                    // Close View Button
-                    IconButton(
-                        onClick = onClosePlayer,
-                        modifier = Modifier.background(Color.White.copy(alpha = 0.2f), CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close Player",
-                            tint = Color.White
-                        )
-                    }
-                }
-
                 // CENTER ERROR / BUFFERING
                 if (playbackError != null) {
                     Column(
@@ -381,7 +416,7 @@ fun ChannelVideoPlayer(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter)
-                            .padding(24.dp),
+                            .padding(bottom = 36.dp, start = 20.dp, end = 20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         // Category pill
@@ -391,11 +426,12 @@ fun ChannelVideoPlayer(
                                 color = Color.LightGray,
                                 fontSize = 12.sp,
                                 modifier = Modifier
-                                    .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                                    .border(0.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 12.dp, vertical = 5.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -411,7 +447,10 @@ fun ChannelVideoPlayer(
                                         else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
                                     }
                                 },
-                                modifier = Modifier.background(Color.White.copy(alpha = 0.15f), CircleShape)
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .background(Color.Black.copy(alpha = 0.75f), CircleShape)
+                                    .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
                             ) {
                                 Icon(
                                     imageVector = when (resizeMode) {
@@ -437,7 +476,10 @@ fun ChannelVideoPlayer(
                                         }
                                     }
                                 },
-                                modifier = Modifier.background(Color.White.copy(alpha = 0.15f), CircleShape)
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .background(Color.Black.copy(alpha = 0.75f), CircleShape)
+                                    .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ScreenRotation,
@@ -449,7 +491,10 @@ fun ChannelVideoPlayer(
                             // Previous Channel Button
                             IconButton(
                                 onClick = onPreviousChannel,
-                                modifier = Modifier.background(Color.White.copy(alpha = 0.15f), CircleShape)
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .background(Color.Black.copy(alpha = 0.75f), CircleShape)
+                                    .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.SkipPrevious,
@@ -471,7 +516,9 @@ fun ChannelVideoPlayer(
                                 containerColor = AccentRed,
                                 contentColor = Color.White,
                                 shape = CircleShape,
-                                modifier = Modifier.size(58.dp)
+                                modifier = Modifier
+                                    .size(60.dp)
+                                    .border(1.5.dp, Color.White.copy(alpha = 0.4f), CircleShape)
                             ) {
                                 Icon(
                                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -483,7 +530,10 @@ fun ChannelVideoPlayer(
                             // Next Channel Button
                             IconButton(
                                 onClick = onNextChannel,
-                                modifier = Modifier.background(Color.White.copy(alpha = 0.15f), CircleShape)
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .background(Color.Black.copy(alpha = 0.75f), CircleShape)
+                                    .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.SkipNext,
@@ -502,7 +552,10 @@ fun ChannelVideoPlayer(
                                         exoPlayer.volume = 1.0f
                                     }
                                 },
-                                modifier = Modifier.background(Color.White.copy(alpha = 0.15f), CircleShape)
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .background(Color.Black.copy(alpha = 0.75f), CircleShape)
+                                    .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
                             ) {
                                 val isMuted = exoPlayer.volume == 0.0f
                                 Icon(

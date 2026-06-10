@@ -114,6 +114,21 @@ class IPTVViewModel(application: Application) : AndroidViewModel(application) {
         filtered.mapNotNull { it.groupTitle }.distinct().sorted()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Map of categories with their corresponding channel counts
+    val categoriesWithCounts: StateFlow<Map<String, Int>> = combine(
+        allChannels,
+        _activePlaylistId
+    ) { channels, playlistId ->
+        val filtered = if (playlistId != null) {
+            channels.filter { it.playlistId == playlistId }
+        } else {
+            channels
+        }
+        filtered.groupBy { it.groupTitle ?: "" }
+            .filterKeys { it.isNotBlank() }
+            .mapValues { it.value.size }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     // EPG schedules for active playing channel
     private val _channelEPG = MutableStateFlow<List<EPGProgram>>(emptyList())
     val channelEPG: StateFlow<List<EPGProgram>> = _channelEPG.asStateFlow()

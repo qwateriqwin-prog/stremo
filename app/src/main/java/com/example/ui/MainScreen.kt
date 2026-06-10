@@ -67,7 +67,20 @@ fun MainScreen(
     val activePlaylistId by viewModel.activePlaylistId.collectAsStateWithLifecycle()
     val activeCategory by viewModel.activeCategory.collectAsStateWithLifecycle()
     val availableCategories by viewModel.availableCategories.collectAsStateWithLifecycle()
+    val categoriesWithCounts by viewModel.categoriesWithCounts.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+
+    val speechRecognizerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+        onResult = { result ->
+            if (result.resultCode == android.app.Activity.RESULT_OK) {
+                val spokenText = result.data?.getStringArrayListExtra(
+                    android.speech.RecognizerIntent.EXTRA_RESULTS
+                )?.firstOrNull() ?: ""
+                viewModel.updateSearchQuery(spokenText)
+            }
+        }
+    )
     val sortOrder by viewModel.userPreferredOrder.collectAsStateWithLifecycle()
     val activeChannel by viewModel.activeChannel.collectAsStateWithLifecycle()
     val channelEPG by viewModel.channelEPG.collectAsStateWithLifecycle()
@@ -365,9 +378,27 @@ fun MainScreen(
                     placeholder = { Text("ابحث عن القنوات بالاسم أو التصنيف...", fontSize = 13.sp, color = SoftGray) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = SoftGray) },
                     trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = SoftGray)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = SoftGray)
+                                }
+                            }
+                            IconButton(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "ar-SA")
+                                            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "ابحث بالتسجيل الصوتي عن القنوات...")
+                                        }
+                                        speechRecognizerLauncher.launch(intent)
+                                    } catch (e: Exception) {
+                                        // Ignore smoothly
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Default.Mic, contentDescription = "Voice Search", tint = AccentRed)
                             }
                         }
                     },
@@ -384,6 +415,45 @@ fun MainScreen(
                         unfocusedTextColor = themeTextColor
                     )
                 )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Search result count or active filter description
+                if (searchQuery.isNotEmpty() || activeCategory != null || activePlaylistId != null) {
+                    val count = channels.size
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp, horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = when {
+                                searchQuery.isNotEmpty() && activeCategory != null -> "نتائج البحث عن \"$searchQuery\" في قسم $activeCategory"
+                                searchQuery.isNotEmpty() -> "نتائج البحث عن \"$searchQuery\""
+                                activeCategory != null -> "قنوات قسم $activeCategory"
+                                else -> "قنوات السيرفر النشط"
+                            },
+                            color = SoftGray,
+                            fontSize = 11.sp
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(AccentCyan.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "تم العثور على $count قناة",
+                                color = AccentCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -481,6 +551,7 @@ fun MainScreen(
 
             // HORIZONTAL CATEGORIES ROW
             if (availableCategories.isNotEmpty()) {
+                val totalChannelsInScope = categoriesWithCounts.values.sum()
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -498,17 +569,42 @@ fun MainScreen(
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                             modifier = Modifier.height(34.dp)
                         ) {
-                            Text(
-                                "جميع التصنيفات",
-                                color = if (activeCategory == null) Color.White else themeTextColor,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    "جميع التصنيفات",
+                                    color = if (activeCategory == null) Color.White else themeTextColor,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (totalChannelsInScope > 0) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (activeCategory == null) Color.White.copy(alpha = 0.35f)
+                                                else AccentCyan.copy(alpha = 0.15f)
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = totalChannelsInScope.toString(),
+                                            color = if (activeCategory == null) Color.White else AccentCyan,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
                     items(availableCategories) { category ->
                         val isSelected = activeCategory == category
+                        val count = categoriesWithCounts[category] ?: 0
                         Button(
                             onClick = { viewModel.selectCategory(category) },
                             colors = ButtonDefaults.buttonColors(
@@ -518,12 +614,36 @@ fun MainScreen(
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                             modifier = Modifier.height(34.dp)
                         ) {
-                            Text(
-                                text = category,
-                                color = if (isSelected) Color.White else themeTextColor,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = category,
+                                    color = if (isSelected) Color.White else themeTextColor,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (count > 0) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (isSelected) Color.White.copy(alpha = 0.35f)
+                                                else AccentCyan.copy(alpha = 0.15f)
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = count.toString(),
+                                            color = if (isSelected) Color.White else AccentCyan,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
