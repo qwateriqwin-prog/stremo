@@ -3,6 +3,7 @@ package com.example.ui
 import android.content.Intent
 import android.net.Uri
 import android.text.format.DateFormat
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -103,9 +104,10 @@ fun MainScreen(
         colors = listOf(AccentRed.copy(alpha = 0.8f), AccentCyan.copy(alpha = 0.8f))
     )
 
-    val isLandscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-
-    if (activeChannel != null && isLandscape) {
+    if (activeChannel != null) {
+        BackHandler {
+            viewModel.playChannel(null)
+        }
         val userAgent = viewModel.getUserAgentForChannel(activeChannel!!)
         Box(
             modifier = Modifier
