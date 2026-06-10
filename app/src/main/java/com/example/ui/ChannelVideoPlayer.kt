@@ -52,10 +52,11 @@ fun ChannelVideoPlayer(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var isPlaying by remember { mutableStateOf(true) }
+    var currentAttempt by remember(channel.id) { mutableStateOf(0) }
+    var isPlaying by remember(channel.id, currentAttempt) { mutableStateOf(true) }
     var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
-    var playbackError by remember { mutableStateOf<String?>(null) }
-    var isBuffering by remember { mutableStateOf(true) }
+    var playbackError by remember(channel.id, currentAttempt) { mutableStateOf<String?>(null) }
+    var isBuffering by remember(channel.id, currentAttempt) { mutableStateOf(true) }
     var showControls by remember { mutableStateOf(true) }
 
     // Pulse animation logic for the LIVE indicator
@@ -70,13 +71,12 @@ fun ChannelVideoPlayer(
         label = "pulse"
     )
 
-    var currentAttempt by remember(channel.id) { mutableStateOf(0) }
-
     // Build ExoPlayer with optional customized User Agent, SSL bypass, Cookie preservation, and reactive fallback attempts
     val exoPlayer = remember(channel.id, currentAttempt) {
         val clientBuilder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            .protocols(java.util.Collections.singletonList(okhttp3.Protocol.HTTP_1_1)) // Avoid HTTP/2 compatibility handshaking errors
             .followRedirects(true)
             .followSslRedirects(true)
             .cookieJar(object : okhttp3.CookieJar {
@@ -108,24 +108,31 @@ fun ChannelVideoPlayer(
 
         val client = clientBuilder.build()
 
-        val userAgentHeader = if (!customUserAgent.isNullOrBlank()) {
-            customUserAgent.trim()
-        } else {
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        val userAgentHeader = when (currentAttempt) {
+            0 -> if (!customUserAgent.isNullOrBlank()) customUserAgent.trim() else null
+            1 -> null // None - default system standard agent
+            2 -> "VLC/3.0.18"
+            3 -> "Smart-IPTV-Agent-Pro"
+            else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
         // Configure Media3 DataSource depending on current attempt
-        val dataSourceFactory = if (currentAttempt < 3) {
+        val dataSourceFactory = if (currentAttempt < 4) {
             val okHttpFactory = OkHttpDataSource.Factory(client)
-                .setUserAgent(userAgentHeader)
+            if (userAgentHeader != null) {
+                okHttpFactory.setUserAgent(userAgentHeader)
+            }
             
             // Wrap in DefaultDataSource.Factory to handle multi-protocol fallbacks
             androidx.media3.datasource.DefaultDataSource.Factory(context, okHttpFactory)
         } else {
             // Ultimate fallback using native HTTP datasource
-            androidx.media3.datasource.DefaultHttpDataSource.Factory()
-                .setUserAgent(userAgentHeader)
-                .setAllowCrossProtocolRedirects(true)
+            val nativeFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            if (userAgentHeader != null) {
+                nativeFactory.setUserAgent(userAgentHeader)
+            }
+            nativeFactory.setAllowCrossProtocolRedirects(true)
+            androidx.media3.datasource.DefaultDataSource.Factory(context, nativeFactory)
         }
 
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
@@ -138,7 +145,7 @@ fun ChannelVideoPlayer(
 
                 val urlLower = channel.url.lowercase()
                 when (currentAttempt) {
-                    0 -> {
+                    0, 1 -> {
                         // Guide auto-detection for known formats
                         if (urlLower.contains("m3u8")) {
                             mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
@@ -148,15 +155,15 @@ fun ChannelVideoPlayer(
                             mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_RTSP)
                         }
                     }
-                    1 -> {
+                    2 -> {
                         // Enforce HLS
                         mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
                     }
-                    2 -> {
+                    3 -> {
                         // Enforce Progressive TS
                         mediaItemBuilder.setMimeType(androidx.media3.common.MimeTypes.VIDEO_MP2T)
                     }
-                    // Attempt 3+: Let ExoPlayer auto detect inside DefaultHttpDataSource fallback
+                    // Attempt 4+: Let ExoPlayer auto detect everything inside native fallback
                 }
 
                 setMediaItem(mediaItemBuilder.build())
@@ -177,7 +184,7 @@ fun ChannelVideoPlayer(
 
             override fun onPlayerError(error: PlaybackException) {
                 error.printStackTrace()
-                if (currentAttempt < 3) {
+                if (currentAttempt < 4) {
                     // Try the next playback configuration silently
                     currentAttempt++
                     isBuffering = true
@@ -191,6 +198,21 @@ fun ChannelVideoPlayer(
         onDispose {
             exoPlayer.removeListener(listener)
             exoPlayer.release()
+        }
+    }
+
+    // Buffering timeout watcher: if we stay in buffering state for too long (> 8 seconds) without progress, trigger next fallback
+    LaunchedEffect(isBuffering, currentAttempt) {
+        if (isBuffering && playbackError == null) {
+            kotlinx.coroutines.delay(8000)
+            if (isBuffering) {
+                if (currentAttempt < 4) {
+                    currentAttempt++
+                } else {
+                    playbackError = "انتهت مهلة الاتصال بالبث المباشر. تأكد من أن السيرفر يعمل أو جرب تغيير اليوزر اجنت."
+                    isBuffering = false
+                }
+            }
         }
     }
 
@@ -227,6 +249,9 @@ fun ChannelVideoPlayer(
                 }
             },
             update = { view ->
+                if (view.player != exoPlayer) {
+                    view.player = exoPlayer
+                }
                 view.resizeMode = resizeMode
             },
             modifier = Modifier.fillMaxSize()
@@ -399,6 +424,28 @@ fun ChannelVideoPlayer(
                                 )
                             }
 
+                            // Dynamic Screen Rotation Toggle
+                            IconButton(
+                                onClick = {
+                                    val activity = context.findActivity()
+                                    if (activity != null) {
+                                        val isCurrentlyLandscape = context.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                                        if (isCurrentlyLandscape) {
+                                            activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                        } else {
+                                            activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.background(Color.White.copy(alpha = 0.15f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ScreenRotation,
+                                    contentDescription = "Rotate Screen",
+                                    tint = Color.White
+                                )
+                            }
+
                             // Previous Channel Button
                             IconButton(
                                 onClick = onPreviousChannel,
@@ -470,4 +517,13 @@ fun ChannelVideoPlayer(
             }
         }
     }
+}
+
+private fun android.content.Context.findActivity(): android.app.Activity? {
+    var context = this
+    while (context is android.content.ContextWrapper) {
+        if (context is android.app.Activity) return context
+        context = context.baseContext
+    }
+    return null
 }

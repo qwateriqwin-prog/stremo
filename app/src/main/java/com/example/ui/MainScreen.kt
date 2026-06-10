@@ -103,7 +103,26 @@ fun MainScreen(
         colors = listOf(AccentRed.copy(alpha = 0.8f), AccentCyan.copy(alpha = 0.8f))
     )
 
-    Scaffold(
+    val isLandscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    if (activeChannel != null && isLandscape) {
+        val userAgent = viewModel.getUserAgentForChannel(activeChannel!!)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            ChannelVideoPlayer(
+                channel = activeChannel!!,
+                customUserAgent = userAgent,
+                onNextChannel = { viewModel.playNextChannel() },
+                onPreviousChannel = { viewModel.playPreviousChannel() },
+                onClosePlayer = { viewModel.playChannel(null) },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    } else {
+        Scaffold(
         modifier = modifier.background(themeBgColor),
         containerColor = themeBgColor,
         topBar = {
@@ -743,7 +762,7 @@ fun MainScreen(
             onDismiss = { showSettingsDialog = false }
         )
     }
-}
+} }
 
 /**
  * Custom styled grid item representing a broadcast channel
